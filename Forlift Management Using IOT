@@ -1,0 +1,246 @@
+ //Coding for FORKLIFT MANAGEMENT using IOT
+ #include <ESP8266WiFi.h>  
+ #include <WiFiClient.h>  
+ #include <ThingSpeak.h>  
+ int offset =0;
+
+#include "HX711.h"  
+HX711 scale(D1, D2);
+float calibration_factor = -402; 
+
+ const char* ssid = "NapsterNagaraj";  
+ const char* password = "9087823046";  
+ WiFiClient client;  
+ unsigned long myChannelNumber = 459167;  
+ const char * myWriteAPIKey = "6H8KQX65OSE2DWJM";  
+ 
+
+
+String data="";
+int mark = 0;
+boolean Mark_Start=false;
+boolean valid=false;
+String GGAUTCtime,GGAlatitude,GGAlongitude,GPStatus,SatelliteNum,HDOPfactor,Height,
+PositionValid,RMCUTCtime,RMClatitude,RMClongitude,Speed,Direction,Date,Declination,Mode;
+void setup(){
+   Serial.begin(9600);  
+  delay(100);  
+   Serial.println("Press T to tare");
+  scale.set_scale(-402);  
+  scale.tare();   
+
+  // Connect to WiFi network  
+  Serial.println();  
+  Serial.println();  
+  Serial.print("Connecting to ");  
+  Serial.println(ssid);  
+  WiFi.begin(ssid, password);  
+  while (WiFi.status() != WL_CONNECTED)  
+  {  
+   delay(500);  
+   Serial.print(".");  
+  }  
+  Serial.println("");  
+  Serial.println("WiFi connected");  
+  // Print the IP address  
+  Serial.println(WiFi.localIP());  
+  ThingSpeak.begin(client); 
+  Serial.begin(9600);
+  Serial1.begin(9600);
+  Serial.println(0);
+  delay(1000);
+
+}
+
+
+void loop(){
+   printVolts();
+  Loadcell();
+
+  while (Serial1.available()> 0){
+    if(Mark_Start){
+      data=reader();
+      Serial.println(data);
+      if(data.equals("GPGGA")){
+        //Serial.println(1);
+        GGAUTCtime=reader();
+        GGAlatitude=reader();
+        GGAlatitude+=reader();
+        GGAlongitude=reader();
+        GGAlongitude+=reader();
+        GPStatus=reader();
+        SatelliteNum=reader();
+        HDOPfactor=reader();
+        Height=reader();
+        Mark_Start=false;
+        valid=true;
+        data="";
+
+      }
+      else if(data.equals("GPGSA")){
+        Serial.println(2);
+        Mark_Start=false;
+        data="";
+      }
+      else if(data.equals("GPGSV  ")){
+        Serial.println(3);
+        Mark_Start=false;
+        data="";
+      }
+      else if(data.equals("GPRMC")){
+        //Serial.println(4);
+        RMCUTCtime=reader();
+        PositionValid=reader();
+        RMClatitude=reader();
+        RMClatitude+=reader();
+        RMClongitude=reader();
+        RMClongitude+=reader();
+        Speed=reader();
+        Direction=reader();
+        Date=reader();
+        Declination=reader();
+        Declination+=reader();
+        Mode=reader();
+        valid=true;
+        Mark_Start=false;
+        data="";
+      }
+      else if(data.equals("GPVTG  ")){
+        Serial.println(5);
+        Mark_Start=false;
+        data="";
+      }
+      else{
+        Serial.println(6);
+        Mark_Start=false;
+        data="";
+      }
+    }
+    if(valid){
+      if(PositionValid=="A"){
+        Serial.println("Position Valid");
+      }
+      else{
+        Serial.println("Your position is not valid.");
+      }
+      Serial.print("Date:");
+      Serial.print(Date);
+      Serial.print("    UTCtime:");
+      Serial.print(RMCUTCtime);
+      Serial.print("   ");
+      Serial.print(GGAUTCtime);
+      Serial.print("    Latitude:");
+      Serial.print(RMClatitude);
+      Serial.print("   ");
+      Serial.print(GGAlatitude);
+      Serial.print("    Longitude:");
+      Serial.print(RMClongitude);
+      Serial.print("   ");
+      Serial.println(GGAlongitude);
+      Serial.println("GPStatus:");
+      Serial.print(GPStatus);
+      Serial.print("  SatelliteNum:");
+      Serial.print(SatelliteNum);
+      Serial.print("  HDOPfactor:");
+      Serial.print(HDOPfactor);
+      Serial.print("  Height:");
+      Serial.println(Height);
+      Serial.print("  Speed:");
+      Serial.print(Speed);
+      Serial.print("  Direction:");
+      Serial.print(Direction);
+      Serial.print("  Declination:");
+      Serial.print(Declination);
+      Serial.print(  "Mode:");
+      Serial.println(Mode);     
+      valid=false;
+      delay(10000);
+    }
+    if(Serial1.find("$")){
+      Serial.print("  capture");
+      Mark_Start=true;
+    }
+  }
+
+}
+
+String reader(){
+  String value="";
+  int temp;
+startover:
+  while (Serial1.available() > 0){
+    delay(2);
+    temp=Serial1.read();
+    if((temp==',')||(temp=='*')){
+      if(value.length()){
+        //Serial.println("meaningful message");
+        return value;
+      }
+      else {
+        //Serial.println("empty");
+        return "";
+      }     
+    }
+    else if(temp=='$'){
+      //Serial.println("failure");
+      Mark_Start=false;
+    }
+    else{
+      //Serial.println("add");
+      value+=char(temp);
+    }
+  }
+  while (!(Serial1.available()>0)){
+  }
+  goto startover;
+}
+void printVolts()
+{
+ int volt = analogRead(A0);// read the input
+  double vin = map(volt,0,1023, 0, 2500) + offset;// map 0-1023 to 0-2500 and add correction offset
+  
+  vin /=100;// divide by 100 to get the decimal values
+  //Serial.print("Voltage: ");
+  //Serial.print(vin);//print the voltge
+  //Serial.println("V");
+
+delay(500);
+ int B;
+if(vin>9.46) {
+   Serial.print("                     Battery level is 100%");
+   B=100;
+   Serial.println(B);}
+else { Serial.print(" ");}
+if(vin<=9.46 && vin>9.28) {
+  Serial.print("              Battery level is 95%");
+  B=95;}
+else {Serial.print(" ");}
+if(vin<=9.28 && vin>9.12) {Serial.print("               Battery level is 90%");
+B=90;}
+else { Serial.print(" ");}
+if(vin<=9.12 && vin>8.98) {Serial.print("              Battery level is 80%");
+B=80;}
+else { Serial.print(" ");}
+if(vin<=8.98 && vin>8.90){Serial.print("               Battery level is 70%");
+B=70;}
+else {Serial.print(" ");}
+if(vin<=8.90) {Serial.print("                        Battery about to die");
+B=10;}
+else {Serial.print(" ");}
+delay(200);
+    ThingSpeak.writeField(myChannelNumber, 2,B, myWriteAPIKey); 
+  }
+void Loadcell(){Serial.print("             Weight: ");
+  
+  Serial.print(scale.get_units(), 2);  
+int L=scale.get_units();
+  Serial.println(L,2);
+  Serial.println(" grams"); 
+   ThingSpeak.writeField(myChannelNumber, 1,L, myWriteAPIKey);
+ 
+  if(Serial.available())
+  {
+    char temp = Serial.read();
+    if(temp == 't' || temp == 'T')
+      scale.tare();       
+  }}
